@@ -1,2 +1,3 @@
 # used_fabrik
-exercise with airflow
+
+Exercise with Apache Airflow by crawling some online second-hand markets.
