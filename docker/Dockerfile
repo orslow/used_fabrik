@@ -3,7 +3,7 @@ USER root
 
 RUN apt update
 RUN echo deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main >> /etc/apt/sources.list
-RUN apt install wget gnupg unzip curl -y
+RUN apt install wget gnupg unzip curl vim -y
 RUN wget https://dl.google.com/linux/linux_signing_key.pub
 RUN apt-key add linux_signing_key.pub
 RUN apt update

@@ -1,19 +1,26 @@
 from datetime import timedelta
-from airflow import DAG 
+from airflow import DAG
 from airflow.operators.bash_operator import BashOperator
 from airflow.operators.python_operator import PythonOperator
 from airflow.utils.dates import days_ago
 
-# crawling related deps
+# crawling deps
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
+
 from bs4 import BeautifulSoup
+
 import re
 
-def getProducts(query):
+def getProducts(**kwargs):
+    query=kwargs['keyword']
+    min_price=kwargs['min_price']
+    max_price=kwargs['max_price']
+    filename=kwargs['filename']
+    keywords_except=kwargs['keywords_except']
 
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')
@@ -27,7 +34,7 @@ def getProducts(query):
     try:
         element = WebDriverWait(browser, 10).until(
             EC.presence_of_element_located((By.ID, "root"))
-        )   
+        )
         soup = BeautifulSoup(element.get_attribute('innerHTML'), features='html.parser')
         # mydivs = soup.find_all("div", {"class": "sc-gmeYpB iqTUpV"})
         # print(mydivs.text)
@@ -35,21 +42,29 @@ def getProducts(query):
         productNames=[]
         productPrices=[]
         productLinks=[]
-        for e in soup.find_all("div", {"class": "sc-gmeYpB iqTUpV"}): # product class name
+        for e in soup.find_all("div", {"class": "sc-gmeYpB iqTUpV"}):
             productNames.append(e.text)
 
-        for e in soup.find_all("div", {"class": re.compile("sc-kZmsYB*")}): # price class name
+        for e in soup.find_all("div", {"class": re.compile("sc-kZmsYB*")}):
             if e.text=="연락요망":
                 productPrices.append(-1)
             else:
                 productPrices.append(e.text.replace(',',''))
 
-        for e in soup.find_all("a", {"class": "sc-kxynE kzhuNn"}): # product page id
+        for e in soup.find_all("a", {"class": "sc-kxynE kzhuNn"}):
             productLinks.append(e["data-pid"])
 
-        with open("output.txt", "w") as text_file:
+        with open(filename, "w") as text_file:
             for i in range(len(productNames)):
-                text_file.write(productNames[i]+','+productPrices[i]+','+productLinks[i]+'\n')
+                vlt=0
+                for kwd in keywords_except:
+                    if kwd in productNames[i]:
+                        vlt=1
+                        break
+                if not vlt and int(productPrices[i]) >= min_price and int(productPrices[i]) <= max_price:
+                    text_file.write(productNames[i]+','+productPrices[i]+','+productLinks[i]+'\n')
+                # print(productNames[i], productPrices[i], productLinks[i])
+
     finally:
         browser.quit()
 
@@ -57,9 +72,9 @@ def getProducts(query):
 #defining DAG arguments
 
 default_args = {
-    'owner': 'jueon',
+    'owner': 'jovyan',
     'start_date': days_ago(0),
-    'email': ['jueonpk@gmail.com'],
+    'email': ['ramesh@somemail.com'],
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
@@ -67,18 +82,27 @@ default_args = {
 }
 
 dag = DAG(
-    'bunjang-crawling-dag',
+    'bunjang-multiple-items-dag',
+    catchup=False,
     default_args=default_args,
     description='test',
     schedule_interval=timedelta(minutes=10),
 )
 
-extract = PythonOperator(
-    task_id='extract',
+orslow = PythonOperator(
+    task_id='orslow',
     provide_context=True,
     python_callable=getProducts,
-    op_kwargs={'query': 'RRL'},
+    op_kwargs={'keyword': 'orslow', 'min_price': 0, 'max_price': 200000, 'filename': 'orslow', 'keywords_except': ['여성용']},
     dag=dag,
 )
 
-extract
+rrl = PythonOperator(
+    task_id='rrl',
+    provide_context=True,
+    python_callable=getProducts,
+    op_kwargs={'keyword': 'rrl', 'min_price': 0, 'max_price': 300000, 'filename': 'rrl', 'keywords_except': []},
+    dag=dag,
+)
+
+[orslow, rrl]
